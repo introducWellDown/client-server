@@ -1,45 +1,78 @@
 import tkinter as tk
 from tkinter import ttk
+import threading
+import requests
 
-def on_scroll(*args):
-    fraction = scrollbar.get()
-    rows_in_view = int(tree_height / row_height)
-    rows_to_scroll = total_rows - rows_in_view
-    scrolled_rows = rows_to_scroll * fraction
-    print("fraction:" , fraction)
-    print("rows_in_view:" , rows_in_view)
-    print("rows_to_scroll:" , rows_to_scroll)
-    print("Прокручено строк:", scrolled_rows)
+USERS_JSON_URL = "http://localhost:5000"  # Замените на URL вашего сервера
+PAGE_SIZE = 50  # Количество записей, запрашиваемых с сервера за раз
+MAX_USERS = 1000  # Общее количество пользователей на сервере (задайте реальное значение)
 
-root = tk.Tk()
-root.title("Scrollbar Example")
-root.geometry("500x300")
+def load_users_from_server(page):
+    try:
+        response = requests.get(f"{USERS_JSON_URL}?page={page}&size={PAGE_SIZE}")
+        response.raise_for_status()  # Это вызовет исключение для статусных кодов, отличных от 2xx
+        data = response.json()
+        print("Данные получены с сервера:", data)  # Добавьте эту строку, чтобы проверить формат данных
+        return data
+    except requests.exceptions.RequestException as e:
+        print("Ошибка при получении данных с сервера:", e)
+        return []
 
-# Создаем Treeview с 100 строками
-tree_height = 200
-row_height = 20
-total_rows = 100
+def create_column(count, names):
+    for i in range(count):
+        column_id = f"column_{i+1}"
+        column_width = int(500 / count)
 
-columns = ttk.Treeview(root, column=("column_1", "column_2"), show='headings', height=tree_height // row_height)
-columns.column("#1", anchor=tk.CENTER)
-columns.column("#2", anchor=tk.CENTER)
+        columns.column(column_id, anchor=tk.CENTER, width=column_width)
+        columns.heading(column_id, text=names[i])
 
-# Создаем вертикальный скроллбар
-scrollbar = ttk.Scrollbar(root, orient="vertical", command=columns.yview)
+def insert_data(data_list):
+    for item in data_list:
+        values = [item["id"], item["name"], item["pay"]]
+        columns.insert('', 'end', values=values)
+
+def on_scroll(event):
+    global last_loaded_page
+
+    # Получаем информацию о видимой части Treeview при прокрутке
+    first_visible = int(event.y / 20)  # Предполагаем, что высота строки 20 (может потребоваться корректировка)
+    last_visible = int((event.y + event.height) / 20) - 1
+
+    # Проверяем, нужно ли загрузить новые данные
+    current_page = (first_visible // PAGE_SIZE) + 1
+    if current_page * PAGE_SIZE <= MAX_USERS and current_page != last_loaded_page:
+        new_data = load_users_from_server(current_page)
+        insert_data(new_data)
+        last_loaded_page = current_page
+
+root_window = tk.Tk()
+root_window.title("client")
+root_window.geometry("500x670")
+
+style = ttk.Style().theme_use('clam')
+columns = ttk.Treeview(root_window, column=("column_1", "column_2", "column_3"), show='headings', height=32)
+
+scrollbar = ttk.Scrollbar(root_window, orient="vertical", command=columns.yview)
 columns.configure(yscrollcommand=scrollbar.set)
 
-# Размещаем Treeview и скроллбар на главном окне
 columns.grid(row=0, column=0, sticky="nsew")
 scrollbar.grid(row=0, column=1, sticky="ns")
 
-# Настраиваем упаковку столбцов для заполнения доступной ширины окна
-root.grid_columnconfigure(0, weight=1)
+root_window.grid_columnconfigure(0, weight=1)
 
-# Вставляем данные в Treeview
-for i in range(total_rows):
-    columns.insert('', 'end', values=("Column 1", "Column 2"))
+create_column(3, ["id", "name", "pay"])
 
-# Связываем обработчик on_scroll с событием прокрутки скроллбара
-scrollbar.bind("<B1-Motion>", on_scroll)
+current_page = 1
+last_loaded_page = 0
 
-root.mainloop()
+# Загружаем первую порцию данных с сервера
+data = load_users_from_server(current_page)
+insert_data(data)
+last_loaded_page = current_page
+
+# Связываем событие прокрутки с обработчиком
+columns.bind("<Configure>", on_scroll)
+
+root_window.mainloop()
+
+

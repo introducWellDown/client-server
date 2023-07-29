@@ -14,7 +14,7 @@ def load_users_from_json():
     except FileNotFoundError:
         return []
 
-# Заменяем список users на загрузку из JSON-файла
+# Список users  из JSON-файла
 users = load_users_from_json()
 
 # Создаем основное окно

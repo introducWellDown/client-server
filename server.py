@@ -53,22 +53,22 @@ def modify_users():
             if users:
                 user_to_change = random.choice(users)
                 user_to_change["pay"] = random.choice([True, False])
-                print(f'Изменено значение у пользователя: id={user_to_change["id"]} в поле "Pay" на {user_to_change["pay"]}')
+                #print(f'Изменено значение у пользователя: id={user_to_change["id"]} в поле "Pay" на {user_to_change["pay"]}')
 
             # Произвольно удаляем пользователя
             if users:
                 user_to_remove = random.choice(users)
                 users.remove(user_to_remove)
-                print(f"Удален пользователь: {user_to_remove}")
-                for user in users:
-                    print(user)
+                #print(f"Удален пользователь: {user_to_remove}")
+                #for user in users:
+                    #print(user)
 
             # Произвольно добавляем нового пользователя
             new_user = {"id": generate_unique_id(), "name": random.choice(names), "pay": random.choice([True, False])}
             users.append(new_user)
-            print(f"Добавлен новый пользователь: {new_user}")
-            for user in users:
-                print(user)
+            #print(f"Добавлен новый пользователь: {new_user}")
+            #for user in users:
+                #print(user)
 
             # Сохраняем обновленные данные в JSON-файл
             save_users_to_json(users)

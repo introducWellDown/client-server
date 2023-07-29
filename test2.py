@@ -1,34 +1,113 @@
-import tkinter as tk
-from tkinter import ttk
+import threading
+import time
+import random
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-root_window = tk.Tk()
-root_window.title("Scrollbar Example")
-root_window.geometry("500x300")
+# В этом скрипте происхрдит имитация работы сервера,который постоянно меняется.
+# Добавляются новые пользователи,удаляются старые,меняются значения полей уже существующих пользователей 
 
-# Создаем Treeview с 10 строками
-columns = ttk.Treeview(root_window, column=("column_1", "column_2"), show='headings', height=10)
-columns.column("#1", anchor=tk.CENTER)
-columns.column("#2", anchor=tk.CENTER)
+# Создаем список имен пользователей для дальнейшей генерации полей в списке users
+names = ["igor", "Koly", "Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry"]
 
-# Создаем вертикальный скроллбар
-scrollbar = ttk.Scrollbar(root_window, orient="vertical", command=columns.yview)
-columns.configure(yscrollcommand=scrollbar.set)
+# Блокировка для синхронизации доступа к списку пользователей
+lock = threading.Lock()
 
-# Размещаем Treeview и скроллбар на главном окне
-columns.grid(row=0, column=0, sticky="nsew")
-scrollbar.grid(row=0, column=1, sticky="ns")
+def is_unique_id(new_id):
+    for user in users:
+        if user['id'] == new_id:
+            return False
+    return True
 
-# Настраиваем упаковку столбцов для заполнения доступной ширины окна
-root_window.grid_columnconfigure(0, weight=1)
+def generate_unique_id():
+    while True:
+        new_id = random.randint(1, 1000)
+        if is_unique_id(new_id):
+            return new_id
 
-# Вставляем данные в Treeview (создаем 10 пустых элементов для прокрутки)
-for i in range(50):
-    columns.insert('', 'end', values=("1 ", " 2"))
-for i in range(50,100):
-    columns.insert('', 'end', values=(" ", " "))
+USERS_JSON_FILE = "users.json"
 
-# Убираем вертикальную сетку
-style = ttk.Style()
-style.layout("Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
+def load_users_from_json():
+    try:
+        with open(USERS_JSON_FILE, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []
 
-root_window.mainloop()
+def save_users_to_json(users_data):
+    with open(USERS_JSON_FILE, "w") as file:
+        json.dump(users_data, file,indent=2)
+
+# Заменяем список users на загрузку из JSON-файла
+users = load_users_from_json()
+
+def modify_users():
+    global users
+
+    while True:
+        time.sleep(1)  
+
+        with lock:
+            # Вносим произвольные изменения в данные пользователей
+            if users:
+                user_to_change = random.choice(users)
+                user_to_change["pay"] = random.choice([True, False])
+                #print(f'Изменено значение у пользователя: id={user_to_change["id"]} в поле "Pay" на {user_to_change["pay"]}')
+
+            # Произвольно удаляем пользователя
+            if users:
+                user_to_remove = random.choice(users)
+                users.remove(user_to_remove)
+                #print(f"Удален пользователь: {user_to_remove}")
+                #for user in users:
+                    #print(user)
+
+            # Произвольно добавляем нового пользователя
+            new_user = {"id": generate_unique_id(), "name": random.choice(names), "pay": random.choice([True, False])}
+            users.append(new_user)
+            #print(f"Добавлен новый пользователь: {new_user}")
+            #for user in users:
+                #print(user)
+
+            # Сохраняем обновленные данные в JSON-файл
+            save_users_to_json(users)
+
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.lock = kwargs.pop("lock")
+        super().__init__(*args, **kwargs)
+
+    def _set_response(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+
+    def do_GET(self):
+        if self.path == '/':
+            self._set_response()
+            with self.lock:
+                response = json.dumps(users).encode('utf-8')
+                self.wfile.write(response)
+
+def run_server(lock):
+    server_address = ('localhost', 5000)
+    httpd = HTTPServer(server_address, lambda *args, **kwargs: SimpleHTTPRequestHandler(*args, lock=lock, **kwargs))
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    # Запускаем сервер в отдельном потоке
+    server_thread = threading.Thread(target=run_server, args=(lock,))
+    server_thread.daemon = True
+    server_thread.start()
+
+    # Запускаем поток для модификации пользователей
+    modify_users_thread = threading.Thread(target=modify_users)
+    modify_users_thread.daemon = True
+    modify_users_thread.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        # При остановке программы закрываем файл users.json
+        save_users_to_json(users)
